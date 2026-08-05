@@ -176,6 +176,7 @@ public static class AcmeErrorTypes
     public const string Unauthorized = "urn:ietf:params:acme:error:unauthorized";
     public const string InvalidContact = "urn:ietf:params:acme:error:invalidContact";
     public const string UserActionRequired = "urn:ietf:params:acme:error:userActionRequired";
+    public const string ExternalAccountRequired = "urn:ietf:params:acme:error:externalAccountRequired";
 }
 
 /// <summary>RFC 5280 吊销原因码。</summary>

@@ -84,6 +84,21 @@ public class AcmeClientTests
     }
 
     [Fact]
+    public async Task NewAccountAsync_ExternalAccountRequired_HintsEab()
+    {
+        var (client, server) = CreateClient();
+        server.RequireExternalAccountBinding = true;
+        using (client)
+        {
+            var ex = await Assert.ThrowsAsync<AcmeException>(() =>
+                client.NewAccountAsync(["mailto:admin@example.com"], termsOfServiceAgreed: true));
+
+            Assert.Equal(AcmeErrorTypes.ExternalAccountRequired, ex.ErrorType);
+            Assert.Contains("EabCredentials", ex.Message);
+        }
+    }
+
+    [Fact]
     public async Task BadNonce_IsRetried_AndSucceeds()
     {
         var (client, server) = CreateClient();

@@ -360,6 +360,12 @@ public sealed class AcmeClient : IDisposable
             }
 
             var message = problem?.Detail ?? $"ACME 请求失败 (HTTP {(int)response.StatusCode})";
+            if (problem is not null &&
+                string.Equals(problem.Type, AcmeErrorTypes.ExternalAccountRequired, StringComparison.Ordinal))
+            {
+                message += "。该 CA（如 ZeroSSL）要求 EAB 凭据：请在 NewAccountAsync 传入 EabCredentials（KID + HMAC key）。";
+            }
+
             throw new AcmeException(
                 message,
                 errorType: problem?.Type,

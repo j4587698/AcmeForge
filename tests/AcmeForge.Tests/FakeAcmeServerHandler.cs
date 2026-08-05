@@ -19,6 +19,7 @@ internal sealed class FakeAcmeServerHandler : HttpMessageHandler
     public int NonceHeadCalls;
     public bool RejectFirstPostWithBadNonce;
     public bool FailNextPost;
+    public bool RequireExternalAccountBinding;
 
     public string? LastProtectedHeader;
     public string? LastPayload;
@@ -215,7 +216,9 @@ internal sealed class FakeAcmeServerHandler : HttpMessageHandler
 
         return path switch
         {
-            "/new-account" => Json(201, AccountJson, location: AccountUrl, nonce: IssueNonce()),
+            "/new-account" => RequireExternalAccountBinding
+                ? Json(400, "{\"type\":\"urn:ietf:params:acme:error:externalAccountRequired\",\"detail\":\"No External Account Binding present\"}", nonce: IssueNonce())
+                : Json(201, AccountJson, location: AccountUrl, nonce: IssueNonce()),
             "/new-order" => Json(201, OrderJson, location: BaseUrl + "/order/1", nonce: IssueNonce()),
             "/finalize/1" => Json(200, FinalizedOrderJson, nonce: IssueNonce()),
             "/challenge/1" => Json(200, ChallengeJson, nonce: IssueNonce()),
