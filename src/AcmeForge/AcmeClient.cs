@@ -71,9 +71,20 @@ public sealed class AcmeClient : IDisposable
     /// 创建 ACME 客户端（自定义 HttpClient，适用于 IHttpClientFactory / DI 环境）。
     /// </summary>
     /// <param name="httpClient">用于 ACME 请求的 HttpClient（建议由 IHttpClientFactory 创建）。</param>
-    /// <param name="directoryUrl">ACME directory 端点（如 Let's Encrypt: https://acme-v02.api.letsencrypt.org/directory）。</param>
+    /// <param name="directoryUrl">ACME directory 端点，可用 <see cref="AcmeEndpoints"/> 或自定义 CA。</param>
     /// <param name="accountKey">账户密钥。已存在账户用 FromPem 导入，新账户用 Generate 生成。</param>
     public AcmeClient(HttpClient httpClient, Uri directoryUrl, AcmeKey accountKey)
+        : this(httpClient, ownsHttp: false, directoryUrl, accountKey)
+    {
+    }
+
+    /// <summary>
+    /// 创建 ACME 客户端（自定义 directory + 自定义 HttpClient，顺序为 directory 在前，语义同 <see cref="AcmeClient(HttpClient, Uri, AcmeKey)"/>）。
+    /// </summary>
+    /// <param name="directoryUrl">ACME directory 端点，可用 <see cref="AcmeEndpoints"/> 或自定义 CA。</param>
+    /// <param name="httpClient">用于 ACME 请求的 HttpClient（建议由 IHttpClientFactory 创建）。</param>
+    /// <param name="accountKey">账户密钥。已存在账户用 FromPem 导入，新账户用 Generate 生成。</param>
+    public AcmeClient(Uri directoryUrl, HttpClient httpClient, AcmeKey accountKey)
         : this(httpClient, ownsHttp: false, directoryUrl, accountKey)
     {
     }
