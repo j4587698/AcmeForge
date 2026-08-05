@@ -46,8 +46,10 @@ jobs:
             Add-Content -Path $env:GITHUB_OUTPUT -Value "should_publish=true"
           }
 
-      - name: Pack
-        run: dotnet pack src/AcmeForge/AcmeForge.csproj -c Release
+      # csproj 已开启 GeneratePackageOnBuild，build 即产出 .nupkg/.snupkg；
+      # 若再调 dotnet pack 会与 build 内嵌的 pack 冲突（NU5026 找不到 dll）。
+      - name: Build and produce packages
+        run: dotnet build src/AcmeForge/AcmeForge.csproj -c Release
         if: steps.check.outputs.should_publish == 'true'
 
       - name: NuGet login (OIDC → temp API key)
