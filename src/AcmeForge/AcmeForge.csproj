@@ -13,7 +13,7 @@
 
     <!-- 包元数据 -->
     <PackageId>AcmeForge</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>jx</Authors>
     <Description>Native AOT compatible ACME (RFC 8555) client for .NET with built-in DNS providers. Zero reflection, JSON source-generated, trimmable.</Description>
     <PackageTags>acme;letsencrypt;certificate;ssl;tls;dns;aot;nativeaot;rfc8555</PackageTags>

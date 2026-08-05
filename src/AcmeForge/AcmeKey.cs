@@ -101,6 +101,22 @@ public sealed class AcmeKey : IDisposable
         throw new InvalidOperationException("密钥未初始化");
     }
 
+    /// <summary>以 PKCS#8 DER 格式导出私钥（兼容 Certes ToDer 输出格式）。</summary>
+    public byte[] ToDer()
+    {
+        if (_ecdsa is not null)
+        {
+            return _ecdsa.ExportPkcs8PrivateKey();
+        }
+
+        if (_rsa is not null)
+        {
+            return _rsa.ExportPkcs8PrivateKey();
+        }
+
+        throw new InvalidOperationException("密钥未初始化");
+    }
+
     /// <summary>JWS 签名算法标识。</summary>
     public string JwsAlgorithm => _algorithm switch
     {

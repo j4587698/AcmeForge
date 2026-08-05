@@ -193,3 +193,19 @@ public enum AcmeRevocationReason
     PrivilegeWithdrawn = 9,
     AaCompromise = 10,
 }
+
+/// <summary>完成订单（finalize + 轮询 + 下载）的结果。</summary>
+public sealed class AcmeOrderCompletionResult
+{
+    /// <summary>订单最终状态："valid" / "invalid" / 超时前的当前状态。</summary>
+    public string? Status { get; set; }
+
+    /// <summary>是否在超时前未达到 valid/invalid。</summary>
+    public bool TimedOut { get; set; }
+
+    /// <summary>订单状态为 valid 时的证书 PEM 链。</summary>
+    public string? CertificatePem { get; set; }
+
+    /// <summary>订单状态为 invalid 时的错误信息。</summary>
+    public AcmeProblem? Error { get; set; }
+}

@@ -347,6 +347,121 @@ public sealed class AcmeClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// 触发挑战验证并轮询直到结果为 valid/invalid，或超时返回当前状态。
+    /// </summary>
+    /// <param name="challengeUrl">挑战 URL。</param>
+    /// <param name="timeout">总等待超时。</param>
+    /// <param name="pollInterval">轮询间隔，默认 3 秒。</param>
+    public async Task<AcmeChallenge> WaitForChallengeValidAsync(
+        Uri challengeUrl,
+        TimeSpan timeout,
+        TimeSpan? pollInterval = null,
+        CancellationToken cancellationToken = default)
+    {
+        var interval = pollInterval ?? TimeSpan.FromSeconds(3);
+        var deadline = DateTime.UtcNow + timeout;
+
+        await ValidateChallengeAsync(challengeUrl, cancellationToken).ConfigureAwait(false);
+
+        while (true)
+        {
+            await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
+
+            var challenge = await GetChallengeAsync(challengeUrl, cancellationToken).ConfigureAwait(false);
+            var status = challenge.Status?.ToLowerInvariant();
+            if (status == "valid" || status == "invalid")
+            {
+                return challenge;
+            }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                return challenge;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 完成订单：提交 CSR finalize，轮询直到 valid/invalid 或超时；valid 时下载证书 PEM。
+    /// </summary>
+    /// <param name="orderUrl">订单 URL。</param>
+    /// <param name="csrDer">CSR（DER 编码）。</param>
+    /// <param name="timeout">总等待超时。</param>
+    /// <param name="pollInterval">轮询间隔，默认 2 秒。</param>
+    public async Task<AcmeOrderCompletionResult> CompleteOrderAsync(
+        Uri orderUrl,
+        byte[] csrDer,
+        TimeSpan timeout,
+        TimeSpan? pollInterval = null,
+        CancellationToken cancellationToken = default)
+    {
+        var interval = pollInterval ?? TimeSpan.FromSeconds(2);
+        var deadline = DateTime.UtcNow + timeout;
+
+        var order = await GetOrderAsync(orderUrl, cancellationToken).ConfigureAwait(false);
+        var status = order.Status?.ToLowerInvariant();
+
+        // 已经是 valid 的订单直接下载（例如刚验证完成或幂等重试）
+        if (status == "valid")
+        {
+            var certificatePem = await DownloadCertificatePemAsync(
+                new Uri(order.Certificate ?? throw new AcmeException("订单 valid 但缺少 certificate 端点")),
+                cancellationToken).ConfigureAwait(false);
+
+            return new AcmeOrderCompletionResult
+            {
+                Status = "valid",
+                CertificatePem = certificatePem
+            };
+        }
+
+        // 需要 finalize
+        if (status == "ready")
+        {
+            await FinalizeAsync(new Uri(order.Finalize ?? throw new AcmeException("订单 ready 但缺少 finalize 端点")), csrDer, cancellationToken).ConfigureAwait(false);
+        }
+
+        while (true)
+        {
+            await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
+
+            var current = await GetOrderAsync(orderUrl, cancellationToken).ConfigureAwait(false);
+            var currentStatus = current.Status?.ToLowerInvariant();
+
+            if (currentStatus == "valid")
+            {
+                var certificatePem = await DownloadCertificatePemAsync(
+                    new Uri(current.Certificate ?? throw new AcmeException("订单 valid 但缺少 certificate 端点")),
+                    cancellationToken).ConfigureAwait(false);
+
+                return new AcmeOrderCompletionResult
+                {
+                    Status = "valid",
+                    CertificatePem = certificatePem
+                };
+            }
+
+            if (currentStatus == "invalid")
+            {
+                return new AcmeOrderCompletionResult
+                {
+                    Status = "invalid",
+                    Error = current.Error
+                };
+            }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                return new AcmeOrderCompletionResult
+                {
+                    Status = currentStatus,
+                    TimedOut = true
+                };
+            }
+        }
+    }
+
     private string GetKidOrThrow() => _kid
         ?? throw new AcmeException("账户尚未注册，无法执行该操作。请先调用 NewAccountAsync");
 

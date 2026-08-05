@@ -21,6 +21,12 @@ internal sealed class FakeAcmeServerHandler : HttpMessageHandler
     public bool FailNextPost;
     public bool RequireExternalAccountBinding;
 
+    /// <summary>每次访问 /order/1 依次返回的订单状态（测试状态流转用），默认 null = 固定 pending。</summary>
+    public List<string>? OrderStatusPollSequence;
+
+    /// <summary>每次访问 /challenge/1 依次返回的挑战状态（测试状态流转用），默认 null = 固定 valid。</summary>
+    public List<string>? ChallengeStatusPollSequence;
+
     public string? LastProtectedHeader;
     public string? LastPayload;
     public string? LastSignature;
@@ -30,6 +36,8 @@ internal sealed class FakeAcmeServerHandler : HttpMessageHandler
     private readonly Dictionary<string, string> _jwkByKid = new();
     private int _nonceSeq;
     private bool _firstPostHandled;
+    private int _orderPollIndex;
+    private int _challengePollIndex;
 
     private const string DirectoryJson = """
         {
@@ -221,15 +229,57 @@ internal sealed class FakeAcmeServerHandler : HttpMessageHandler
                 : Json(201, AccountJson, location: AccountUrl, nonce: IssueNonce()),
             "/new-order" => Json(201, OrderJson, location: BaseUrl + "/order/1", nonce: IssueNonce()),
             "/finalize/1" => Json(200, FinalizedOrderJson, nonce: IssueNonce()),
-            "/challenge/1" => Json(200, ChallengeJson, nonce: IssueNonce()),
+            "/challenge/1" => Json(200, NextChallengeJson(), nonce: IssueNonce()),
             "/authz/1" => Json(200, AuthorizationJson, nonce: IssueNonce()),
-            "/order/1" => Json(200, OrderJson, nonce: IssueNonce()),
+            "/order/1" => Json(200, NextOrderJson(), nonce: IssueNonce()),
             "/acct/1" => Json(200, AccountJson, nonce: IssueNonce()),
             "/cert/1" => Json(200, CertificatePem, nonce: IssueNonce(), contentType: "application/pem-certificate-chain"),
             "/revoke-cert" => Json(200, "", nonce: IssueNonce()),
             "/new-nonce" => Json(204, "", nonce: IssueNonce()),
             _ => Json(404, "{\"type\":\"urn:ietf:params:acme:error:malformed\",\"detail\":\"not found\"}", nonce: IssueNonce()),
         };
+    }
+
+    /// <summary>按状态序列返回订单 JSON，未配置序列时固定返回 pending 订单。</summary>
+    private string NextOrderJson()
+    {
+        if (OrderStatusPollSequence is null)
+        {
+            return OrderJson;
+        }
+
+        lock (_gate)
+        {
+            var status = OrderStatusPollSequence[Math.Min(_orderPollIndex++, OrderStatusPollSequence.Count - 1)];
+            return BuildOrderJson(status);
+        }
+    }
+
+    /// <summary>按状态序列返回挑战 JSON，未配置序列时固定返回 valid 挑战。</summary>
+    private string NextChallengeJson()
+    {
+        if (ChallengeStatusPollSequence is null)
+        {
+            return ChallengeJson;
+        }
+
+        lock (_gate)
+        {
+            var status = ChallengeStatusPollSequence[Math.Min(_challengePollIndex++, ChallengeStatusPollSequence.Count - 1)];
+            return $@"{{""type"":""dns-01"",""url"":""{BaseUrl}/challenge/1"",""status"":""{status}"",""token"":""tok_abc""}}";
+        }
+    }
+
+    /// <summary>按订单状态构建订单 JSON（ready/processing/valid 附 finalize 或 certificate 端点）。</summary>
+    private static string BuildOrderJson(string status)
+    {
+        var finalize = status == "ready" || status == "processing"
+            ? $@",""finalize"":""{BaseUrl}/finalize/1"""
+            : string.Empty;
+        var certificate = status == "valid"
+            ? $@",""certificate"":""{BaseUrl}/cert/1"""
+            : string.Empty;
+        return $@"{{""status"":""{status}"",""expires"":""2026-01-01T00:00:00Z"",""identifiers"":[{{""type"":""dns"",""value"":""example.com""}}],""authorizations"":[""{BaseUrl}/authz/1""]{finalize}{certificate}}}";
     }
 
     private static void VerifyJwsSignature(byte[] signingInput, string signatureB64, JsonElement jwk)

@@ -240,6 +240,152 @@ public class AcmeClientTests
     }
 
     [Fact]
+    public async Task WaitForChallengeValidAsync_PollsUntilValid()
+    {
+        var (client, server) = await CreateRegisteredClient();
+        using (client)
+        {
+            // 第一次访问返回 pending，后续返回 valid
+            server.ChallengeStatusPollSequence = new List<string> { "pending", "valid" };
+
+            var result = await client.WaitForChallengeValidAsync(
+                new Uri("https://acme.test/challenge/1"),
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromMilliseconds(10));
+
+            Assert.Equal("valid", result.Status);
+        }
+    }
+
+    [Fact]
+    public async Task WaitForChallengeValidAsync_ReturnsOnInvalid()
+    {
+        var (client, server) = await CreateRegisteredClient();
+        using (client)
+        {
+            server.ChallengeStatusPollSequence = new List<string> { "invalid" };
+
+            var result = await client.WaitForChallengeValidAsync(
+                new Uri("https://acme.test/challenge/1"),
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromMilliseconds(10));
+
+            Assert.Equal("invalid", result.Status);
+        }
+    }
+
+    [Fact]
+    public async Task WaitForChallengeValidAsync_ReturnsCurrentStatusOnTimeout()
+    {
+        var (client, server) = await CreateRegisteredClient();
+        using (client)
+        {
+            // 始终不进入终态，等待超时
+            server.ChallengeStatusPollSequence = new List<string> { "processing", "processing", "processing" };
+
+            var result = await client.WaitForChallengeValidAsync(
+                new Uri("https://acme.test/challenge/1"),
+                TimeSpan.FromMilliseconds(200),
+                TimeSpan.FromMilliseconds(50));
+
+            Assert.Equal("processing", result.Status);
+        }
+    }
+
+    [Fact]
+    public async Task CompleteOrderAsync_FinalizePollDownload_ReturnsPem()
+    {
+        var (client, server) = await CreateRegisteredClient();
+        using (client)
+        {
+            using var certKey = AcmeKey.Generate(AcmeKeyAlgorithm.ES256);
+            var csr = CsrBuilder.CreateSigningRequestDer(certKey, "example.com", new[] { "example.com" });
+
+            // ready → processing → valid
+            server.OrderStatusPollSequence = new List<string> { "ready", "processing", "valid" };
+
+            var result = await client.CompleteOrderAsync(
+                new Uri("https://acme.test/order/1"),
+                csr,
+                TimeSpan.FromSeconds(10),
+                TimeSpan.FromMilliseconds(10));
+
+            Assert.Equal("valid", result.Status);
+            Assert.False(result.TimedOut);
+            Assert.Contains("BEGIN CERTIFICATE", result.CertificatePem);
+            Assert.Contains("/finalize/1", server.PostPaths);
+            Assert.Contains("/cert/1", server.PostPaths);
+        }
+    }
+
+    [Fact]
+    public async Task CompleteOrderAsync_AlreadyValid_DownloadsWithoutFinalize()
+    {
+        var (client, server) = await CreateRegisteredClient();
+        using (client)
+        {
+            using var certKey = AcmeKey.Generate(AcmeKeyAlgorithm.ES256);
+            var csr = CsrBuilder.CreateSigningRequestDer(certKey, "example.com", new[] { "example.com" });
+
+            server.OrderStatusPollSequence = new List<string> { "valid" };
+
+            var result = await client.CompleteOrderAsync(
+                new Uri("https://acme.test/order/1"),
+                csr,
+                TimeSpan.FromSeconds(10),
+                TimeSpan.FromMilliseconds(10));
+
+            Assert.Equal("valid", result.Status);
+            Assert.Contains("BEGIN CERTIFICATE", result.CertificatePem);
+            Assert.DoesNotContain("/finalize/1", server.PostPaths);
+        }
+    }
+
+    [Fact]
+    public async Task CompleteOrderAsync_Invalid_ReturnsError()
+    {
+        var (client, server) = await CreateRegisteredClient();
+        using (client)
+        {
+            using var certKey = AcmeKey.Generate(AcmeKeyAlgorithm.ES256);
+            var csr = CsrBuilder.CreateSigningRequestDer(certKey, "example.com", new[] { "example.com" });
+
+            server.OrderStatusPollSequence = new List<string> { "ready", "processing", "invalid" };
+
+            var result = await client.CompleteOrderAsync(
+                new Uri("https://acme.test/order/1"),
+                csr,
+                TimeSpan.FromSeconds(10),
+                TimeSpan.FromMilliseconds(10));
+
+            Assert.Equal("invalid", result.Status);
+        }
+    }
+
+    [Fact]
+    public async Task CompleteOrderAsync_PendingTimeout_ReturnsTimedOut()
+    {
+        var (client, server) = await CreateRegisteredClient();
+        using (client)
+        {
+            using var certKey = AcmeKey.Generate(AcmeKeyAlgorithm.ES256);
+            var csr = CsrBuilder.CreateSigningRequestDer(certKey, "example.com", new[] { "example.com" });
+
+            // 永不进入终态（pending），等待超时
+            server.OrderStatusPollSequence = new List<string> { "ready", "pending", "pending", "pending" };
+
+            var result = await client.CompleteOrderAsync(
+                new Uri("https://acme.test/order/1"),
+                csr,
+                TimeSpan.FromMilliseconds(200),
+                TimeSpan.FromMilliseconds(50));
+
+            Assert.True(result.TimedOut);
+            Assert.Null(result.CertificatePem);
+        }
+    }
+
+    [Fact]
     public void AcmeCertificateResult_ExportPfx_ReturnsValidPfx()
     {
         using var ecdsa = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
