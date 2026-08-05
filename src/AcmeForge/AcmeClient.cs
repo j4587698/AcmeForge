@@ -13,8 +13,10 @@ namespace AcmeForge;
 public sealed class AcmeClient : IDisposable
 {
     private const int MaxRequestRetries = 20;
+    private const string UserAgent = "AcmeForge/0.1.0";
 
     private readonly HttpClient _http;
+    private readonly bool _ownsHttp;
     private readonly Uri _directoryUrl;
     private readonly AcmeKey _accountKey;
     private readonly object _sync = new();
@@ -25,16 +27,39 @@ public sealed class AcmeClient : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// 创建 ACME 客户端。
+    /// 创建 ACME 客户端（自建 HttpClient，通常场景用这个即可，无需关心 HTTP 细节）。
+    /// </summary>
+    /// <param name="directoryUrl">ACME directory 端点（如 Let's Encrypt: https://acme-v02.api.letsencrypt.org/directory）。</param>
+    /// <param name="accountKey">账户密钥。已存在账户用 FromPem 导入，新账户用 Generate 生成。</param>
+    public AcmeClient(Uri directoryUrl, AcmeKey accountKey)
+        : this(CreateDefaultHttpClient(), ownsHttp: true, directoryUrl, accountKey)
+    {
+    }
+
+    /// <summary>
+    /// 创建 ACME 客户端（自定义 HttpClient，适用于 IHttpClientFactory / DI 环境）。
     /// </summary>
     /// <param name="httpClient">用于 ACME 请求的 HttpClient（建议由 IHttpClientFactory 创建）。</param>
     /// <param name="directoryUrl">ACME directory 端点（如 Let's Encrypt: https://acme-v02.api.letsencrypt.org/directory）。</param>
     /// <param name="accountKey">账户密钥。已存在账户用 FromPem 导入，新账户用 Generate 生成。</param>
     public AcmeClient(HttpClient httpClient, Uri directoryUrl, AcmeKey accountKey)
+        : this(httpClient, ownsHttp: false, directoryUrl, accountKey)
+    {
+    }
+
+    private AcmeClient(HttpClient httpClient, bool ownsHttp, Uri directoryUrl, AcmeKey accountKey)
     {
         _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _ownsHttp = ownsHttp;
         _directoryUrl = directoryUrl ?? throw new ArgumentNullException(nameof(directoryUrl));
         _accountKey = accountKey ?? throw new ArgumentNullException(nameof(accountKey));
+    }
+
+    private static HttpClient CreateDefaultHttpClient()
+    {
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        return http;
     }
 
     /// <summary>已注册账户的 KID（account URL）。NewAccountAsync 成功后自动设置。</summary>
@@ -450,6 +475,11 @@ public sealed class AcmeClient : IDisposable
         }
 
         _disposed = true;
+        if (_ownsHttp)
+        {
+            _http.Dispose();
+        }
+
         _accountKey.Dispose();
     }
 }
