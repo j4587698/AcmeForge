@@ -3,6 +3,8 @@ name: Publish to NuGet
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/AcmeForge/AcmeForge.csproj'
   workflow_dispatch:
 
 jobs:
