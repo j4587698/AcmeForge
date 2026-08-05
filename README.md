@@ -111,8 +111,8 @@ foreach (var authzUrl in order.Authorizations ?? [])
     var keyAuthz = ChallengeHelper.ComputeKeyAuthorization(challenge.Token!, accountKey);
     var txtValue = ChallengeHelper.ComputeDnsTxtRecordValue(keyAuthz); // b64url(SHA256(keyAuthz))
 
-    // 通配符域名 (*.example.com) 会自动去掉 *. 再拼接记录名
-    var recordName = $"_acme-challenge.{authz.Identifier!.Value.TrimStart('*', '.')}";
+    // 记录名由库生成：_acme-challenge.<域名>，通配符授权 (*.example.com) 自动去 *. 前缀
+    var recordName = ChallengeHelper.ComputeDnsTxtRecordName(authz.Identifier!.Value);
     await provider.CreateTxtRecordAsync(authz.Identifier.Value, recordName, txtValue, creds);
 
     // 等待 DNS 生效（公共解析器可见后触发，或固定 sleep 15-30s）

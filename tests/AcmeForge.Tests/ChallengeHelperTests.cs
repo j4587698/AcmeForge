@@ -25,6 +25,17 @@ public class ChallengeHelperTests
         Assert.Equal(expected, ChallengeHelper.ComputeDnsTxtRecordValue(keyAuthorization));
     }
 
+    [Theory]
+    [InlineData("example.com", "_acme-challenge.example.com")]
+    [InlineData("*.example.com", "_acme-challenge.example.com")]
+    [InlineData("*.sub.example.co.uk", "_acme-challenge.sub.example.co.uk")]
+    public void ComputeDnsTxtRecordName_HandlesWildcard(string identifier, string expected)
+        => Assert.Equal(expected, ChallengeHelper.ComputeDnsTxtRecordName(identifier));
+
+    [Fact]
+    public void ComputeDnsTxtRecordName_Empty_Throws()
+        => Assert.Throws<ArgumentException>(() => ChallengeHelper.ComputeDnsTxtRecordName(" "));
+
     [Fact]
     public void ComputeAcmeIdentifierHash_IsSha256OfKeyAuthorization()
     {

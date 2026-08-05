@@ -20,6 +20,21 @@ public static class ChallengeHelper
         return Base64UrlText.Encode(hash);
     }
 
+    /// <summary>
+    /// 计算 DNS-01 TXT 记录名 = "_acme-challenge." + 域名。
+    /// 通配符授权（identifier 为 *.example.com）自动去掉 *. 前缀。
+    /// </summary>
+    public static string ComputeDnsTxtRecordName(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            throw new ArgumentException("identifier 不能为空", nameof(identifier));
+        }
+
+        var normalized = identifier.StartsWith("*.", StringComparison.Ordinal) ? identifier[2..] : identifier;
+        return $"_acme-challenge.{normalized}";
+    }
+
     /// <summary>计算 TLS-ALPN-01 acmeIdentifier 哈希 = SHA256(keyAuthorization)。</summary>
     public static byte[] ComputeAcmeIdentifierHash(string keyAuthorization)
         => SHA256.HashData(Encoding.ASCII.GetBytes(keyAuthorization));

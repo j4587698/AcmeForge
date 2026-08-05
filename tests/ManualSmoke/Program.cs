@@ -186,12 +186,11 @@ public class Program
         ILogger logger)
     {
         var txtValue = ChallengeHelper.ComputeDnsTxtRecordValue(keyAuthz);
-
-        // 通配符授权 identifier 为 *.example.com，TXT 记录名必须去掉 *.（同 acme.sh 的 dns-01 处理）。
+        // 通配符授权（*.example.com）自动去 *. 前缀（同 acme.sh 的 dns-01 处理）
         var normalizedIdentifier = identifier.StartsWith("*.", StringComparison.Ordinal)
             ? identifier[2..]
             : identifier;
-        var recordName = $"_acme-challenge.{normalizedIdentifier}";
+        var recordName = ChallengeHelper.ComputeDnsTxtRecordName(identifier);
 
         Console.WriteLine($"  创建 TXT 记录 {recordName} = {txtValue}");
         var create = await provider.CreateTxtRecordAsync(normalizedIdentifier, recordName, txtValue, credentials);
