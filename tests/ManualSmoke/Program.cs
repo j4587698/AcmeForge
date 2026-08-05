@@ -20,8 +20,6 @@ namespace ManualSmoke;
 /// </summary>
 public class Program
 {
-    private const string StagingDirectory = "https://acme-staging-v02.api.letsencrypt.org/directory";
-
     public static async Task<int> Main(string[] args)
     {
         Console.WriteLine("=== AcmeForge 冒烟测试 (Let's Encrypt Staging) ===");
@@ -62,7 +60,7 @@ public class Program
 
         using var acmeClient = new AcmeClient(
             httpClientFactory.CreateClient("acme"),
-            new Uri(StagingDirectory),
+            new Uri(AcmeEndpoints.LetsEncryptStaging),
             accountKey);
 
         var createdRecords = new List<(string Domain, string RecordName, string Value)>();

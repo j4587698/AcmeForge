@@ -16,7 +16,11 @@
 
 ## 快速开始
 
-只需 3 个参数创建客户端：ACME directory、账户密钥。HttpClient 由库内部管理。
+支持的主流 CA 用静态工厂直接创建，无需写 URL：
+
+- `AcmeClient.CreateLetsEncrypt(accountKey)` — Let's Encrypt 生产
+- `AcmeClient.CreateLetsEncryptStaging(accountKey)` — Let's Encrypt 预发（测试签发）
+- `AcmeClient.CreateZeroSsl(accountKey)` — ZeroSSL（注册需 EAB，见下文）
 
 ```csharp
 using AcmeForge;
@@ -24,9 +28,7 @@ using AcmeForge;
 // 账户密钥：新账户用 Generate，续期用 AcmeKey.FromPem(pem) 导入
 using var accountKey = AcmeKey.Generate(AcmeKeyAlgorithm.ES256);
 
-var client = new AcmeClient(
-    new Uri("https://acme-v02.api.letsencrypt.org/directory"),
-    accountKey);
+var client = AcmeClient.CreateLetsEncrypt(accountKey); // 内部自建 HttpClient
 
 // 1. 注册账户（ZeroSSL/Google/SSL.com 需传 EabCredentials）
 await client.NewAccountAsync(["mailto:admin@example.com"], termsOfServiceAgreed: true);
@@ -59,11 +61,11 @@ File.WriteAllText("server.key.pem", cert.PrivateKeyPem);       // PKCS#8 私钥
 File.WriteAllBytes("server.pfx", cert.ExportPfx());            // 或 ExportPfx("密码")
 ```
 
-需要精确控制 HttpClient（超时、代理、连接池）时，可传入自定义实例；此时 HttpClient 的生命周期由调用方负责：
+需要精确控制 HttpClient（超时、代理、连接池）或使用自有 CA 时，传入自定义实例与 directory URL；此时 HttpClient 的生命周期由调用方负责：
 
 ```csharp
 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-var client = new AcmeClient(http, new Uri("https://acme-v02.api.letsencrypt.org/directory"), accountKey);
+var client = new AcmeClient(http, new Uri(AcmeEndpoints.LetsEncrypt), accountKey);
 ```
 
 ### 使用 ZeroSSL（需要 EAB）
@@ -75,10 +77,7 @@ var eab = new EabCredentials(
     KeyId: "你的 EAB KID",
     HmacKey: "你的 EAB HMAC Key"); // 支持 base64url / 标准 base64 / 原始字节
 
-var client = new AcmeClient(
-    new Uri("https://acme.zerossl.com/v2/DV90"),
-    accountKey);
-
+var client = AcmeClient.CreateZeroSsl(accountKey);
 await client.NewAccountAsync(["mailto:admin@example.com"], termsOfServiceAgreed: true, eab);
 ```
 

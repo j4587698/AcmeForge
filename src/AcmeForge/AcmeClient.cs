@@ -6,6 +6,19 @@ using AcmeForge.Resources;
 
 namespace AcmeForge;
 
+/// <summary>已知 ACME CA 的 directory 端点。</summary>
+public static class AcmeEndpoints
+{
+    /// <summary>Let's Encrypt 生产。</summary>
+    public const string LetsEncrypt = "https://acme-v02.api.letsencrypt.org/directory";
+
+    /// <summary>Let's Encrypt 预发（测试签发，证书不受信任）。</summary>
+    public const string LetsEncryptStaging = "https://acme-staging-v02.api.letsencrypt.org/directory";
+
+    /// <summary>ZeroSSL（注册账户需 EabCredentials）。</summary>
+    public const string ZeroSsl = "https://acme.zerossl.com/v2/DV90";
+}
+
 /// <summary>
 /// 原生 AOT 兼容的 ACME (RFC 8555) 客户端。
 /// 纯 BCL 实现：JWS 签名、nonce 管理、badNonce 重试、EAB、订单/授权/挑战/签发/吊销全流程。
@@ -27,9 +40,27 @@ public sealed class AcmeClient : IDisposable
     private bool _disposed;
 
     /// <summary>
+    /// 创建 Let's Encrypt 客户端（自建 HttpClient）。
+    /// </summary>
+    public static AcmeClient CreateLetsEncrypt(AcmeKey accountKey)
+        => new(new Uri(AcmeEndpoints.LetsEncrypt), accountKey);
+
+    /// <summary>
+    /// 创建 Let's Encrypt 预发客户端（自建 HttpClient，测试签发，证书不受信任）。
+    /// </summary>
+    public static AcmeClient CreateLetsEncryptStaging(AcmeKey accountKey)
+        => new(new Uri(AcmeEndpoints.LetsEncryptStaging), accountKey);
+
+    /// <summary>
+    /// 创建 ZeroSSL 客户端（自建 HttpClient）。注册账户需 EabCredentials，见 <see cref="NewAccountAsync"/>。
+    /// </summary>
+    public static AcmeClient CreateZeroSsl(AcmeKey accountKey)
+        => new(new Uri(AcmeEndpoints.ZeroSsl), accountKey);
+
+    /// <summary>
     /// 创建 ACME 客户端（自建 HttpClient，通常场景用这个即可，无需关心 HTTP 细节）。
     /// </summary>
-    /// <param name="directoryUrl">ACME directory 端点（如 Let's Encrypt: https://acme-v02.api.letsencrypt.org/directory）。</param>
+    /// <param name="directoryUrl">ACME directory 端点，可用 <see cref="AcmeEndpoints"/> 或自定义 CA。</param>
     /// <param name="accountKey">账户密钥。已存在账户用 FromPem 导入，新账户用 Generate 生成。</param>
     public AcmeClient(Uri directoryUrl, AcmeKey accountKey)
         : this(CreateDefaultHttpClient(), ownsHttp: true, directoryUrl, accountKey)
@@ -64,6 +95,9 @@ public sealed class AcmeClient : IDisposable
 
     /// <summary>已注册账户的 KID（account URL）。NewAccountAsync 成功后自动设置。</summary>
     public string? Kid => _kid;
+
+    /// <summary>ACME directory 端点。</summary>
+    public Uri DirectoryUrl => _directoryUrl;
 
     /// <summary>获取 ACME directory（内部缓存）。</summary>
     public async Task<AcmeDirectory> GetDirectoryAsync(CancellationToken cancellationToken = default)

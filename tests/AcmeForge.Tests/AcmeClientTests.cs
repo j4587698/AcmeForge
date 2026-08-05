@@ -324,4 +324,17 @@ public class AcmeClientTests
         client.Dispose();
         client.Dispose();
     }
+
+    [Fact]
+    public void FactoryMethods_ConfigureKnownEndpoints()
+    {
+        using var le = AcmeClient.CreateLetsEncrypt(AcmeKey.Generate(AcmeKeyAlgorithm.ES256));
+        Assert.Equal(AcmeEndpoints.LetsEncrypt, le.DirectoryUrl.AbsoluteUri);
+
+        using var staging = AcmeClient.CreateLetsEncryptStaging(AcmeKey.Generate(AcmeKeyAlgorithm.ES256));
+        Assert.Equal(AcmeEndpoints.LetsEncryptStaging, staging.DirectoryUrl.AbsoluteUri);
+
+        using var zero = AcmeClient.CreateZeroSsl(AcmeKey.Generate(AcmeKeyAlgorithm.ES256));
+        Assert.Equal(AcmeEndpoints.ZeroSsl, zero.DirectoryUrl.AbsoluteUri);
+    }
 }
