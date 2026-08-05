@@ -1,0 +1,76 @@
+name: Publish to NuGet
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Read version from csproj
+        id: version
+        shell: pwsh
+        run: |
+          $doc = [System.Xml.XmlDocument]::new()
+          $doc.Load("$pwd/src/AcmeForge/AcmeForge.csproj")
+          $version = $doc.Project.PropertyGroup[0].Version
+          Write-Host "Detected version: $version"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version"
+
+      - name: Check if already published on NuGet.org
+        id: check
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $pkgId = "acmeforge"
+          $url = "https://api.nuget.org/v3-flatcontainer/$pkgId/$version/$pkgId.nuspec"
+          try {
+            $null = Invoke-WebRequest -Uri $url -Method Head -TimeoutSec 15
+            Write-Host "Version $version already exists on NuGet.org — skipping publish"
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "should_publish=false"
+          } catch {
+            Write-Host "Version $version is new — will publish"
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "should_publish=true"
+          }
+
+      - name: Pack
+        run: dotnet pack src/AcmeForge/AcmeForge.csproj -c Release
+        if: steps.check.outputs.should_publish == 'true'
+
+      - name: NuGet login (OIDC → temp API key)
+        if: steps.check.outputs.should_publish == 'true'
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: j4587698
+
+      - name: Push packages to NuGet.org
+        if: steps.check.outputs.should_publish == 'true'
+        shell: pwsh
+        run: |
+          $source = "https://api.nuget.org/v3/index.json"
+          Get-ChildItem -Recurse -Filter "*.nupkg" | ForEach-Object {
+            dotnet nuget push $_.FullName --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source $source --skip-duplicate
+          }
+
+      - name: Create and push git tag
+        if: steps.check.outputs.should_publish == 'true'
+        shell: pwsh
+        run: |
+          $tag = "v${{ steps.version.outputs.version }}"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag $tag
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push origin $tag
