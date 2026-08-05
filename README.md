@@ -66,6 +66,24 @@ using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
 var client = new AcmeClient(http, new Uri("https://acme-v02.api.letsencrypt.org/directory"), accountKey);
 ```
 
+### 使用 ZeroSSL（需要 EAB）
+
+ZeroSSL 等 CA 要求注册账户时携带 EAB 凭据（KID + HMAC Key，在 ZeroSSL 控制台 Developer 页面生成）。缺少 EAB 时库会抛出含 `externalAccountRequired` 与中文提示的 `AcmeException`：
+
+```csharp
+var eab = new EabCredentials(
+    KeyId: "你的 EAB KID",
+    HmacKey: "你的 EAB HMAC Key"); // 支持 base64url / 标准 base64 / 原始字节
+
+var client = new AcmeClient(
+    new Uri("https://acme.zerossl.com/v2/DV90"),
+    accountKey);
+
+await client.NewAccountAsync(["mailto:admin@example.com"], termsOfServiceAgreed: true, eab);
+```
+
+注意：EAB 仅在**创建新账户**时需要；已注册账户续期用 `AcmeKey.FromPem` + 原有 KID 即可。（ZeroSSL 也要求 contact 邮箱已在控制台验证。）
+
 证书成果 `AcmeCertificateResult` 同时提供 `LeafCertificatePem`、`IntermediateChainPem`、`BuildCertificateWithPrivateKey()`（直接用于 TLS 绑定）。
 
 > Full ACME flow in one call chain; the library manages its own `HttpClient` unless you pass one in. Download gives you PEM chain + PKCS#8 key + PFX bytes.
