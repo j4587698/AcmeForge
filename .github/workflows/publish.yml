@@ -26,7 +26,12 @@ jobs:
         run: |
           $doc = [System.Xml.XmlDocument]::new()
           $doc.Load("$pwd/src/AcmeForge/AcmeForge.csproj")
-          $version = $doc.Project.PropertyGroup[0].Version
+          # 不能用 PropertyGroup[0]：包元数据在独立的 PropertyGroup 里，取 [0] 会得到空值
+          $node = $doc.SelectSingleNode('/Project/PropertyGroup/Version')
+          if (-not $node -or [string]::IsNullOrWhiteSpace($node.InnerText)) {
+            throw "Could not find <Version> in src/AcmeForge/AcmeForge.csproj"
+          }
+          $version = $node.InnerText.Trim()
           Write-Host "Detected version: $version"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version"
 
@@ -73,6 +78,9 @@ jobs:
         shell: pwsh
         run: |
           $tag = "v${{ steps.version.outputs.version }}"
+          if ($tag -eq 'v') {
+            throw "Refusing to create a tag from an empty version"
+          }
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git tag $tag
